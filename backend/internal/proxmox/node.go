@@ -25,7 +25,7 @@ func (c *Client) ListNodes() ([]Node, error) {
 		return nil, err
 	}
 	if resp.IsError() {
-		return nil, fmt.Errorf("proxmox API error: %s", resp.String())
+		return nil, fmt.Errorf("Proxmox API error: %s", resp.String())
 	}
 
 	return result.Data, nil
