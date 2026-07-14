@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"log"
 
+	"github.com/TienAnh0108/proxmox-automation-portal/internal/api"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/proxmox"
 	"github.com/spf13/viper"
 )
@@ -26,19 +26,10 @@ func main() {
 
 	client := proxmox.NewClient(host, tokenID, tokenSecret)
 
-	nodes, err := client.ListNodes()
-	if err != nil {
-		fmt.Println("Lỗi khi lấy danh sách node:", err)
-		return
-	}
-	fmt.Println("Danh sách Node:", nodes)
+	router := api.SetupRouter(client)
 
-	if len(nodes) > 0 {
-		vms, err := client.ListVMs(nodes[0].Node)
-		if err != nil {
-			fmt.Println("Lỗi khi lấy danh sách VM:", err)
-			return
-		}
-		fmt.Println("Danh sách VM:", vms)
+	log.Println("Server đang chạy tại http://localhost:8080")
+	if err := router.Run(":8080"); err != nil {
+		log.Fatal("Lỗi khi khởi động server:", err)
 	}
 }
