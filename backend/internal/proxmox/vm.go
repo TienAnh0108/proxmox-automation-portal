@@ -5,35 +5,37 @@ import (
 	"strconv"
 )
 
+// rawVM nhận dữ liệu byte thô từ Proxmox
+type rawVM struct {
+	VMID    int     `json:"vmid"`
+	Name    string  `json:"name"`
+	Status  string  `json:"status"`
+	CPU     float64 `json:"cpu"`
+	Mem     int64   `json:"mem"`
+	MaxMem  int64   `json:"maxmem"`
+	MaxDisk int64   `json:"maxdisk"`
+}
+
+// VM là dữ liệu trả về cho client - chỉ chứa GiB và %
 type VM struct {
 	VMID       int     `json:"vmid"`
 	Name       string  `json:"name"`
 	Status     string  `json:"status"`
-	CPU        float64 `json:"cpu"`
 	CPUPercent float64 `json:"cpu_percent"`
-	Mem        int64   `json:"mem"`
-	MaxMem     int64   `json:"maxmem"`
+	MemGiB     float64 `json:"mem_gib"`
+	MaxMemGiB  float64 `json:"maxmem_gib"`
 	MemPercent float64 `json:"mem_percent"`
-	MaxDisk    int64   `json:"maxdisk"`
+	MaxDiskGiB float64 `json:"maxdisk_gib"`
 }
 
 type vmResponse struct {
-	Data []VM `json:"data"`
+	Data []rawVM `json:"data"`
 }
 
 type taskResponse struct {
 	Data string `json:"data"`
 }
 
-type CreateVMRequest struct {
-	VMID   int    `json:"vmid"`
-	Name   string `json:"name"`
-	Cores  int    `json:"cores"`
-	Memory int    `json:"memory"` // MB unit
-	OSType string `json:"ostype"`
-}
-
-// ListVMs lấy danh sách VM trên 1 node cụ thể
 func (c *Client) ListVMs(node string) ([]VM, error) {
 	var result vmResponse
 
@@ -48,15 +50,25 @@ func (c *Client) ListVMs(node string) ([]VM, error) {
 		return nil, fmt.Errorf("proxmox API error: %s", resp.String())
 	}
 
-	for i := range result.Data {
-		result.Data[i].CPUPercent = roundToPercent(result.Data[i].CPU)
-		result.Data[i].MemPercent = calcPercent(result.Data[i].Mem, result.Data[i].MaxMem)
+	vms := make([]VM, 0, len(result.Data))
+	for _, raw := range result.Data {
+		vms = append(vms, VM{
+			VMID:       raw.VMID,
+			Name:       raw.Name,
+			Status:     raw.Status,
+			CPUPercent: roundToPercent(raw.CPU),
+			MemGiB:     bytesToGiB(raw.Mem),
+			MaxMemGiB:  bytesToGiB(raw.MaxMem),
+			MemPercent: calcPercent(raw.Mem, raw.MaxMem),
+			MaxDiskGiB: bytesToGiB(raw.MaxDisk),
+		})
 	}
 
-	return result.Data, nil
+	return vms, nil
 }
 
-// vmAction gửi lệnh điều khiển VM (start/stop/shutdown/reboot/reset)
+// --- Các hàm điều khiển VM giữ nguyên như cũ, không đổi ---
+
 func (c *Client) vmAction(node string, vmid int, action string) (string, error) {
 	var result taskResponse
 
@@ -71,7 +83,7 @@ func (c *Client) vmAction(node string, vmid int, action string) (string, error) 
 		return "", fmt.Errorf("proxmox API error: %s", resp.String())
 	}
 
-	return result.Data, nil // Trả về UPID để theo dõi task
+	return result.Data, nil
 }
 
 func (c *Client) StartVM(node string, vmid int) (string, error) {
@@ -94,7 +106,15 @@ func (c *Client) ResetVM(node string, vmid int) (string, error) {
 	return c.vmAction(node, vmid, "reset")
 }
 
-// CreateVM
+type CreateVMRequest struct {
+	VMID   int    `json:"vmid"`
+	Name   string `json:"name"`
+	Cores  int    `json:"cores"`
+	Memory int    `json:"memory"`
+	OSType string `json:"ostype"`
+}
+
+// Create Virtual Machine
 func (c *Client) CreateVM(node string, req CreateVMRequest) (string, error) {
 	var result taskResponse
 
@@ -119,7 +139,7 @@ func (c *Client) CreateVM(node string, req CreateVMRequest) (string, error) {
 	return result.Data, nil
 }
 
-// DeleteVM
+// Delete Virtual Machine
 func (c *Client) DeleteVM(node string, vmid int) (string, error) {
 	var result taskResponse
 
