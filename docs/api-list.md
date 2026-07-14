@@ -102,6 +102,7 @@ Base URL: `http://10.8.5.248:8080`
 - **Endpoint:** `/api/nodes/:node/vms/:vmid/reset`
 - **Ví dụ:** `/api/nodes/proxmox/vms/110/reset`
 
+- **Response mẫu (chung cho start/stop/shutdown/reboot/reset):**
 ```json
 {
   "message": "Lệnh đã được gửi",

@@ -6,12 +6,15 @@ import (
 )
 
 type VM struct {
-	VMID   int     `json:"vmid"`
-	Name   string  `json:"name"`
-	Status string  `json:"status"`
-	CPU    float64 `json:"cpu"`
-	Mem    int64   `json:"mem"`
-	MaxMem int64   `json:"maxmem"`
+	VMID       int     `json:"vmid"`
+	Name       string  `json:"name"`
+	Status     string  `json:"status"`
+	CPU        float64 `json:"cpu"`
+	CPUPercent float64 `json:"cpu_percent"`
+	Mem        int64   `json:"mem"`
+	MaxMem     int64   `json:"maxmem"`
+	MemPercent float64 `json:"mem_percent"`
+	MaxDisk    int64   `json:"maxdisk"`
 }
 
 type vmResponse struct {
@@ -43,6 +46,11 @@ func (c *Client) ListVMs(node string) ([]VM, error) {
 	}
 	if resp.IsError() {
 		return nil, fmt.Errorf("proxmox API error: %s", resp.String())
+	}
+
+	for i := range result.Data {
+		result.Data[i].CPUPercent = roundToPercent(result.Data[i].CPU)
+		result.Data[i].MemPercent = calcPercent(result.Data[i].Mem, result.Data[i].MaxMem)
 	}
 
 	return result.Data, nil
