@@ -14,10 +14,6 @@ type Client struct {
 	client      *resty.Client
 }
 
-// NewClient tạo mới một Proxmox API client
-// host: ví dụ "https://192.168.1.10:8006"
-// tokenID: ví dụ "root@pam!mytoken"
-// tokenSecret: chuỗi secret được Proxmox cấp khi tạo token
 func NewClient(host, tokenID, tokenSecret string) *Client {
 	restyClient := resty.New().
 		SetBaseURL(host+"/api2/json").
