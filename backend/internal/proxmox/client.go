@@ -19,7 +19,8 @@ func NewClient(host, tokenID, tokenSecret string) *Client {
 		SetBaseURL(host+"/api2/json").
 		SetHeader("Authorization", fmt.Sprintf("PVEAPIToken=%s=%s", tokenID, tokenSecret)).
 		// Bỏ qua kiểm tra chứng chỉ SSL tự ký (self-signed cert) - chỉ dùng cho môi trường dev/test
-		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
+		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
+		SetContentLength(true)
 
 	return &Client{
 		host:        host,
