@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net"
 
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/api"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/proxmox"
@@ -28,8 +29,31 @@ func main() {
 
 	router := api.SetupRouter(client)
 
-	log.Println("Server đang chạy tại http://localhost:8080")
-	if err := router.Run(":8080"); err != nil {
+	port := viper.GetString("SERVER_PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	ip := getLocalIP()
+	log.Printf("Server đang chạy tại http://localhost:%s (trên VM) hoặc http://%s:%s (từ máy khác)\n", port, ip, port)
+
+	if err := router.Run(":" + port); err != nil {
 		log.Fatal("Lỗi khi khởi động server:", err)
 	}
+}
+
+// Lấy địa chỉ nội bộ của VM để đưa vào log
+func getLocalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "unknown"
+	}
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String()
+			}
+		}
+	}
+	return "unknown"
 }
