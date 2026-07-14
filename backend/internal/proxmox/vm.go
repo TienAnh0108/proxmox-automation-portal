@@ -1,6 +1,9 @@
 package proxmox
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 type VM struct {
 	VMID   int     `json:"vmid"`
@@ -17,6 +20,14 @@ type vmResponse struct {
 
 type taskResponse struct {
 	Data string `json:"data"`
+}
+
+type CreateVMRequest struct {
+	VMID   int    `json:"vmid"`
+	Name   string `json:"name"`
+	Cores  int    `json:"cores"`
+	Memory int    `json:"memory"` // MB unit
+	OSType string `json:"ostype"`
 }
 
 // ListVMs lấy danh sách VM trên 1 node cụ thể
@@ -73,4 +84,47 @@ func (c *Client) RebootVM(node string, vmid int) (string, error) {
 
 func (c *Client) ResetVM(node string, vmid int) (string, error) {
 	return c.vmAction(node, vmid, "reset")
+}
+
+// CreateVM
+func (c *Client) CreateVM(node string, req CreateVMRequest) (string, error) {
+	var result taskResponse
+
+	resp, err := c.client.R().
+		SetFormData(map[string]string{
+			"vmid":   strconv.Itoa(req.VMID),
+			"name":   req.Name,
+			"cores":  strconv.Itoa(req.Cores),
+			"memory": strconv.Itoa(req.Memory),
+			"ostype": req.OSType,
+		}).
+		SetResult(&result).
+		Post(fmt.Sprintf("/nodes/%s/qemu", node))
+
+	if err != nil {
+		return "", err
+	}
+	if resp.IsError() {
+		return "", fmt.Errorf("proxmox API error: %s", resp.String())
+	}
+
+	return result.Data, nil
+}
+
+// DeleteVM
+func (c *Client) DeleteVM(node string, vmid int) (string, error) {
+	var result taskResponse
+
+	resp, err := c.client.R().
+		SetResult(&result).
+		Delete(fmt.Sprintf("/nodes/%s/qemu/%d", node, vmid))
+
+	if err != nil {
+		return "", err
+	}
+	if resp.IsError() {
+		return "", fmt.Errorf("proxmox API error: %s", resp.String())
+	}
+
+	return result.Data, nil
 }

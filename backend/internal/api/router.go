@@ -32,6 +32,43 @@ func SetupRouter(client *proxmox.Client) *gin.Engine {
 			c.JSON(http.StatusOK, vms)
 		})
 
+		api.POST("/nodes/:node/vms", func(c *gin.Context) {
+			node := c.Param("node")
+
+			var req proxmox.CreateVMRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "dữ liệu không hợp lệ: " + err.Error()})
+				return
+			}
+
+			upid, err := client.CreateVM(node, req)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{"message": "Đang tạo VM", "task_id": upid})
+		})
+
+		api.DELETE("/nodes/:node/vms/:vmid", func(c *gin.Context) {
+			node := c.Param("node")
+			vmidStr := c.Param("vmid")
+
+			vmid, err := strconv.Atoi(vmidStr)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "vmid không hợp lệ"})
+				return
+			}
+
+			upid, err := client.DeleteVM(node, vmid)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{"message": "Đang xóa VM", "task_id": upid})
+		})
+
 		api.POST("/nodes/:node/vms/:vmid/start", func(c *gin.Context) {
 			handleVMAction(c, client.StartVM)
 		})
