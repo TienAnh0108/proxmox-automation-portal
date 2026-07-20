@@ -1,1 +1,13 @@
 backend/configs/config.env
+.env
+*.env
+!*.env.example
+
+# Go build artifacts
+backend/bin/
+*.exe
+*.test
+*.out
+
+# Docker volumes data (nếu bind-mount ra thư mục local thay vì named volume)
+postgres_data/
