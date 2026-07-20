@@ -131,7 +131,7 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshRequest) (*dto
 		return nil, ErrTokenExpired
 	}
 
-	user, err := s.userRepo.FindById(ctx, stored.UserID)
+	user, err := s.userRepo.FindByID(ctx, stored.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("find user: %w", err)
 	}
