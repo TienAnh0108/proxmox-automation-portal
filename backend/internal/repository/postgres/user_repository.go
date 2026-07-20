@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/domain"
 	"github.com/google/uuid"
@@ -30,12 +31,12 @@ func NewUserRepository(db *sqlx.DB) *UserRepository {
 // domain.User vì có thể khác biệt nhỏ (ví dụ tag `db` chỉ cần ở đây,
 // domain layer không nên biết gì về cách lưu trữ).
 type userRow struct {
-	ID           string `db:"id"`
-	Username     string `db:"username"`
-	PasswordHash string `db:"password_hash"`
-	Role         string `db:"role"`
-	CreatedAt    string `db:"created_at"`
-	UpdatedAt    string `db:"updated_at"`
+	ID           string    `db:"id"`
+	Username     string    `db:"username"`
+	PasswordHash string    `db:"password_hash"`
+	Role         string    `db:"role"`
+	CreatedAt    time.Time `db:"created_at"`
+	UpdatedAt    time.Time `db:"updated_at"`
 }
 
 func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
@@ -101,5 +102,7 @@ func rowToDomain(row userRow) *domain.User {
 		Username:     row.Username,
 		PasswordHash: row.PasswordHash,
 		Role:         domain.Role(row.Role),
+		CreatedAt:    row.CreatedAt,
+		UpdatedAt:    row.UpdatedAt,
 	}
 }
