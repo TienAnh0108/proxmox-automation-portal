@@ -3,46 +3,46 @@ package main
 import (
 	"log"
 	"net"
+	"time"
 
+	"github.com/TienAnh0108/proxmox-automation-portal/internal/config"
+	"github.com/TienAnh0108/proxmox-automation-portal/internal/database"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/proxmox"
-	api "github.com/TienAnh0108/proxmox-automation-portal/internal/router"
-	"github.com/spf13/viper"
+	"github.com/TienAnh0108/proxmox-automation-portal/internal/repository/postgres"
+	"github.com/TienAnh0108/proxmox-automation-portal/internal/router"
+	"github.com/TienAnh0108/proxmox-automation-portal/internal/service"
 )
 
 func main() {
-	viper.SetConfigFile("configs/config.env")
-	viper.SetConfigType("env")
+	cfg := config.Load()
 
-	if err := viper.ReadInConfig(); err != nil {
-		log.Fatal("Không thể đọc file config.env:", err)
+	db, err := database.Connect(cfg.PostgresDSN())
+	if err != nil {
+		log.Fatal("Không thể kết nối database:", err)
 	}
+	defer db.Close()
 
-	host := viper.GetString("PROXMOX_HOST")
-	tokenID := viper.GetString("PROXMOX_API_TOKEN_ID")
-	tokenSecret := viper.GetString("PROXMOX_API_TOKEN_SECRET")
+	proxmoxClient := proxmox.NewClient(cfg.ProxmoxHost, cfg.ProxmoxTokenID, cfg.ProxmoxTokenSecret)
 
-	if host == "" || tokenID == "" || tokenSecret == "" {
-		log.Fatal("Thiếu biến môi trường PROXMOX_HOST, PROXMOX_API_TOKEN_ID hoặc PROXMOX_API_TOKEN_SECRET")
-	}
+	userRepo := postgres.NewUserRepository(db)
+	refreshRepo := postgres.NewRefreshTokenRepository(db)
+	tokenMgr := service.NewTokenManager(cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
+	authService := service.NewAuthService(userRepo, refreshRepo, tokenMgr)
 
-	client := proxmox.NewClient(host, tokenID, tokenSecret)
-
-	router := api.SetupRouter(client)
-
-	port := viper.GetString("SERVER_PORT")
-	if port == "" {
-		port = "8080"
-	}
+	r := router.SetupRouter(router.Dependencies{
+		ProxmoxClient: proxmoxClient,
+		AuthService:   authService,
+	})
 
 	ip := getLocalIP()
-	log.Printf("Server đang chạy tại http://localhost:%s (trên VM) hoặc http://%s:%s (từ máy khác)\n", port, ip, port)
+	log.Printf("Server đang chạy tại http://localhost:%s (trên VM) hoặc http://%s:%s (từ máy khác)\n",
+		cfg.ServerPort, ip, cfg.ServerPort)
 
-	if err := router.Run(":" + port); err != nil {
+	if err := r.Run(":" + cfg.ServerPort); err != nil {
 		log.Fatal("Lỗi khi khởi động server:", err)
 	}
 }
 
-// Lấy địa chỉ nội bộ của VM để đưa vào log
 func getLocalIP() string {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
@@ -57,3 +57,5 @@ func getLocalIP() string {
 	}
 	return "unknown"
 }
+
+var _ = time.Now
