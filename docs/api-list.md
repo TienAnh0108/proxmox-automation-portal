@@ -311,4 +311,4 @@ curl -X POST http://localhost:8080/api/auth/logout \
 - Refresh token hết hạn sau `REFRESH_TOKEN_TTL_DAYS` (mặc định 7 ngày)
 - Mọi request tới route bảo vệ cần header: `Authorization: Bearer <access_token>`
 - **Mọi endpoint đều có tiền tố `/api`** — lỗi `404 page not found` phổ biến nhất là do quên tiền tố này
-- Role hiện có: `admin`, `user` — mở rộng RBAC chi tiết hơn để ở phase sau MVP
+- Role hiện có: `admin`, `user` — mở rộng RBAC chi tiết hơn để ở phase sau MVP  

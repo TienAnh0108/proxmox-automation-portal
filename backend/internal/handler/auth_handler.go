@@ -5,9 +5,11 @@ import (
 	"net/http"
 
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/dto"
+	"github.com/TienAnh0108/proxmox-automation-portal/internal/logger"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/repository/postgres"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/service"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 type AuthHandler struct {
@@ -112,10 +114,12 @@ func writeAuthError(c *gin.Context, err error) {
 	case errors.Is(err, postgres.ErrUsernameTaken):
 		c.JSON(http.StatusConflict, gin.H{"error": "username đã tồn tại"})
 	default:
-		// Lỗi không xác định (DB down, bug lạ...) — KHÔNG trả chi tiết
-		// err.Error() ra ngoài, tránh lộ thông tin nội bộ (đường dẫn file,
-		// cấu trúc query SQL...) cho client. Chi tiết thật nên đi vào log
-		// (sẽ nối Zap logger ở bước sau).
+		// Lỗi không xác định — log ĐẦY ĐỦ chi tiết (bao gồm err gốc) để debug,
+		// nhưng response cho client vẫn chung chung, không lộ thông tin nội bộ.
+		logger.Log.Error("unhandled auth error",
+			zap.Error(err),
+			zap.String("path", c.Request.URL.Path),
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "đã có lỗi xảy ra, vui lòng thử lại"})
 	}
 }

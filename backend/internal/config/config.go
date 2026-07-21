@@ -14,6 +14,8 @@ type Config struct {
 	ProxmoxTokenID     string
 	ProxmoxTokenSecret string
 
+	AppEnv string
+
 	// Server
 	ServerPort string
 
@@ -46,6 +48,8 @@ func Load() *Config {
 
 		ServerPort: viper.GetString("SERVER_PORT"),
 
+		AppEnv: viper.GetString("APP_ENV"),
+
 		DBHost:     viper.GetString("DB_HOST"),
 		DBPort:     viper.GetString("DB_PORT"),
 		DBUser:     viper.GetString("DB_USER"),
@@ -65,6 +69,9 @@ func Load() *Config {
 // Validate kiểm tra các biến bắt buộc, fail-fast ngay khi khởi động
 // thay vì để lỗi xảy ra giữa chừng lúc runtime
 func (c *Config) validate() {
+	if c.AppEnv == "" {
+		c.AppEnv = "development"
+	}
 	required := map[string]string{
 		"PROXMOX_HOST":             c.ProxmoxHost,
 		"PROXMOX_API_TOKEN_ID":     c.ProxmoxTokenID,

@@ -6,6 +6,7 @@ import (
 
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/domain"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/handler"
+	"github.com/TienAnh0108/proxmox-automation-portal/internal/logger"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/middleware"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/proxmox"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/service"
@@ -18,7 +19,9 @@ type Dependencies struct {
 }
 
 func SetupRouter(deps Dependencies) *gin.Engine {
-	r := gin.Default()
+	r := gin.New()
+	r.Use(middleware.RequestLogger(logger.Log))
+	r.Use(gin.Recovery())
 
 	authHandler := handler.NewAuthHandler(deps.AuthService)
 

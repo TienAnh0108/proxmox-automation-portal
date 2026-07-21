@@ -7,14 +7,18 @@ import (
 
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/config"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/database"
+	"github.com/TienAnh0108/proxmox-automation-portal/internal/logger"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/proxmox"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/repository/postgres"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/router"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/service"
+	"go.uber.org/zap"
 )
 
 func main() {
 	cfg := config.Load()
+	logger.Init(cfg.AppEnv)
+	defer logger.Log.Sync()
 
 	db, err := database.Connect(cfg.PostgresDSN())
 	if err != nil {
@@ -35,11 +39,14 @@ func main() {
 	})
 
 	ip := getLocalIP()
-	log.Printf("Server đang chạy tại http://localhost:%s (trên VM) hoặc http://%s:%s (từ máy khác)\n",
-		cfg.ServerPort, ip, cfg.ServerPort)
+	logger.Log.Info("server đang khởi động",
+		zap.String("port", cfg.ServerPort),
+		zap.String("local_url", "http://localhost:"+cfg.ServerPort),
+		zap.String("lan_url", "http://"+ip+":"+cfg.ServerPort),
+	)
 
 	if err := r.Run(":" + cfg.ServerPort); err != nil {
-		log.Fatal("Lỗi khi khởi động server:", err)
+		logger.Log.Fatal("lỗi khi khởi động server", zap.Error(err))
 	}
 }
 

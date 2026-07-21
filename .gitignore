@@ -1,4 +1,4 @@
-backend/configs/config.env
+backend/internal/config/config.env
 .env
 *.env
 !*.env.example
