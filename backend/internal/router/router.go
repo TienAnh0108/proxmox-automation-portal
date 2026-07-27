@@ -1,6 +1,7 @@
 package router
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -78,6 +79,10 @@ func SetupRouter(deps Dependencies) *gin.Engine {
 
 				detail, err := deps.ProxmoxClient.GetVMDetail(node, vmid)
 				if err != nil {
+					if errors.Is(err, proxmox.ErrVMNotFound) {
+						c.JSON(http.StatusNotFound, gin.H{"error": "VM không tồn tại"})
+						return
+					}
 					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 					return
 				}

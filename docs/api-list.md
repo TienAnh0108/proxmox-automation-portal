@@ -172,7 +172,8 @@ curl -X GET http://localhost:8080/api/nodes \
 ## VM
 
 ### GET /api/nodes/:node/vms
-Danh sách VM trong 1 node.
+Danh sách VM trong 1 node. 
+Lưu ý: response danh sách này **không có** `uptime_seconds`/`cores` - muốn xem 2 fields đó, gọi `GET /api/nodes/:node/vms/:vmid` (chi tiết 1 VM).
 
 **Auth required:** Có (mọi role)
 
@@ -196,6 +197,37 @@ curl -X GET http://localhost:8080/api/nodes/pve-node1/vms \
   }
 ]
 ```
+
+---
+
+### GET /api/nodes/:node/vms/:vmid
+Xem chi tiết 1 VM cụ thể — bao gồm uptime, số core, % sử dụng CPU/RAM/Disk.
+
+**Auth required:** Có (mọi role)
+
+```bash
+curl -X GET http://localhost:8080/api/nodes/proxmox/vms/9997 \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+**Response 200:**
+```json
+{
+  "vmid": 9997,
+  "name": "test-clone-01",
+  "status": "running",
+  "is_template": false,
+  "uptime_seconds": 3600,
+  "cpu_percent": 5.2,
+  "cores": 2,
+  "mem_gib": 1.8,
+  "maxmem_gib": 4,
+  "mem_percent": 45.0,
+  "maxdisk_gib": 32
+}
+```
+
+**Response 500:** VMID không tồn tại trên node (Proxmox trả lỗi, hiện tại chưa map riêng thành 404 — xem ghi chú bên dưới)
 
 ---
 

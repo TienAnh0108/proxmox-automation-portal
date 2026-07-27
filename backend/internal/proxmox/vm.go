@@ -1,8 +1,10 @@
 package proxmox
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/dto"
 )
@@ -58,7 +60,7 @@ type VM struct {
 	MaxMemGiB  float64 `json:"maxmem_gib"`
 	MemPercent float64 `json:"mem_percent"`
 	MaxDiskGiB float64 `json:"maxdisk_gib"`
-	IsTemplate bool    `json:is_template`
+	IsTemplate bool    `json:"is_template"`
 }
 
 type vmStatusResponse struct {
@@ -72,6 +74,8 @@ type vmResponse struct {
 type taskResponse struct {
 	Data string `json:"data"`
 }
+
+var ErrVMNotFound = errors.New("vm not found")
 
 func (c *Client) ListVMs(node string) ([]VM, error) {
 	var result vmResponse
@@ -136,6 +140,9 @@ func (c *Client) GetVMDetail(node string, vmid int) (*VMDetail, error) {
 		return nil, err
 	}
 	if resp.IsError() {
+		if strings.Contains(resp.String(), "does not exist") {
+			return nil, ErrVMNotFound
+		}
 		return nil, fmt.Errorf("proxmox API error: %s", resp.String())
 	}
 
