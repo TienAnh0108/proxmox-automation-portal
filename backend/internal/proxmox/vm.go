@@ -3,17 +3,49 @@ package proxmox
 import (
 	"fmt"
 	"strconv"
+
+	"github.com/TienAnh0108/proxmox-automation-portal/internal/dto"
 )
 
 // rawVM nhận dữ liệu byte thô từ Proxmox
 type rawVM struct {
-	VMID    int     `json:"vmid"`
-	Name    string  `json:"name"`
-	Status  string  `json:"status"`
-	CPU     float64 `json:"cpu"`
-	Mem     int64   `json:"mem"`
-	MaxMem  int64   `json:"maxmem"`
-	MaxDisk int64   `json:"maxdisk"`
+	VMID     int     `json:"vmid"`
+	Name     string  `json:"name"`
+	Status   string  `json:"status"`
+	CPU      float64 `json:"cpu"`
+	Mem      int64   `json:"mem"`
+	MaxMem   int64   `json:"maxmem"`
+	MaxDisk  int64   `json:"maxdisk"`
+	Template int     `json:"template"`
+}
+
+// Chứa thêm uptime, cores, sockets fileds hơn là rawVM
+type rawVMStatus struct {
+	VMID     int     `json:"vmid"`
+	Name     string  `json:"name"`
+	Status   string  `json:"status"`
+	CPU      float64 `json:"cpu"`
+	CPUs     int     `json:"cpus"`
+	Mem      int64   `json:"mem"`
+	MaxMem   int64   `json:"maxmem"`
+	MaxDisk  int64   `json:"maxdisk"`
+	Uptime   int64   `json:"uptime"`
+	Template int     `json:"template"`
+}
+
+// VMDetail là dữ liệu chi tiết trả cho client khi xem 1 VM cụ thể.
+type VMDetail struct {
+	VMID          int     `json:"vmid"`
+	Name          string  `json:"name"`
+	Status        string  `json:"status"`
+	UptimeSeconds int64   `json:"uptime_seconds"`
+	CPUPercent    float64 `json:"cpu_percent"`
+	Cores         int     `json:"cores"`
+	MemGiB        float64 `json:"mem_gib"`
+	MaxMemGiB     float64 `json:"maxmem_gib"`
+	MemPercent    float64 `json:"mem_percent"`
+	MaxDiskGiB    float64 `json:"maxdisk_gib"`
+	IsTemplate    bool    `json:"is_template"`
 }
 
 // VM là dữ liệu trả về cho client - chỉ chứa GiB và %
@@ -26,6 +58,11 @@ type VM struct {
 	MaxMemGiB  float64 `json:"maxmem_gib"`
 	MemPercent float64 `json:"mem_percent"`
 	MaxDiskGiB float64 `json:"maxdisk_gib"`
+	IsTemplate bool    `json:is_template`
+}
+
+type vmStatusResponse struct {
+	Data rawVMStatus `json:"data"`
 }
 
 type vmResponse struct {
@@ -61,6 +98,7 @@ func (c *Client) ListVMs(node string) ([]VM, error) {
 			MaxMemGiB:  bytesToGiB(raw.MaxMem),
 			MemPercent: calcPercent(raw.Mem, raw.MaxMem),
 			MaxDiskGiB: bytesToGiB(raw.MaxDisk),
+			IsTemplate: raw.Template == 1,
 		})
 	}
 
@@ -84,6 +122,37 @@ func (c *Client) vmAction(node string, vmid int, action string) (string, error) 
 	}
 
 	return result.Data, nil
+}
+
+// GetVMDetail lấy thông tin chi tiết 1 VM — dùng cho tính năng "Xem chi tiết VM".
+func (c *Client) GetVMDetail(node string, vmid int) (*VMDetail, error) {
+	var result vmStatusResponse
+
+	resp, err := c.client.R().
+		SetResult(&result).
+		Get(fmt.Sprintf("/nodes/%s/qemu/%d/status/current", node, vmid))
+
+	if err != nil {
+		return nil, err
+	}
+	if resp.IsError() {
+		return nil, fmt.Errorf("proxmox API error: %s", resp.String())
+	}
+
+	raw := result.Data
+	return &VMDetail{
+		VMID:          raw.VMID,
+		Name:          raw.Name,
+		Status:        raw.Status,
+		IsTemplate:    raw.Template == 1,
+		UptimeSeconds: raw.Uptime,
+		CPUPercent:    roundToPercent(raw.CPU),
+		Cores:         raw.CPUs,
+		MemGiB:        bytesToGiB(raw.Mem),
+		MaxMemGiB:     bytesToGiB(raw.MaxMem),
+		MemPercent:    calcPercent(raw.Mem, raw.MaxMem),
+		MaxDiskGiB:    bytesToGiB(raw.MaxDisk),
+	}, nil
 }
 
 func (c *Client) StartVM(node string, vmid int) (string, error) {
@@ -115,19 +184,23 @@ type CreateVMRequest struct {
 }
 
 // Create Virtual Machine
-func (c *Client) CreateVM(node string, req CreateVMRequest) (string, error) {
+func (c *Client) CloneVM(node string, templateVMID int, req dto.CloneVMRequest) (string, error) {
 	var result taskResponse
 
+	formData := map[string]string{
+		"newid": strconv.Itoa(req.NewVMID),
+		"name":  req.Name,
+	}
+	if req.FullClone {
+		formData["full"] = "1"
+	} else {
+		formData["full"] = "0"
+	}
+
 	resp, err := c.client.R().
-		SetFormData(map[string]string{
-			"vmid":   strconv.Itoa(req.VMID),
-			"name":   req.Name,
-			"cores":  strconv.Itoa(req.Cores),
-			"memory": strconv.Itoa(req.Memory),
-			"ostype": req.OSType,
-		}).
+		SetFormData(formData).
 		SetResult(&result).
-		Post(fmt.Sprintf("/nodes/%s/qemu", node))
+		Post(fmt.Sprintf("/nodes/%s/qemu/%d/clone", node, templateVMID))
 
 	if err != nil {
 		return "", err
