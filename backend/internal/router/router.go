@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/domain"
+	"github.com/TienAnh0108/proxmox-automation-portal/internal/dto"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/handler"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/logger"
 	"github.com/TienAnh0108/proxmox-automation-portal/internal/middleware"
@@ -67,19 +68,38 @@ func SetupRouter(deps Dependencies) *gin.Engine {
 				c.JSON(http.StatusOK, vms)
 			})
 
-			protected.POST("/nodes/:node/vms", func(c *gin.Context) {
+			protected.GET("/nodes/:node/vms/:vmid", func(c *gin.Context) {
 				node := c.Param("node")
-				var req proxmox.CreateVMRequest
-				if err := c.ShouldBindJSON(&req); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": "dữ liệu không hợp lệ: " + err.Error()})
+				vmid, err := strconv.Atoi(c.Param("vmid"))
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "vmid không hợp lệ"})
 					return
 				}
-				upid, err := deps.ProxmoxClient.CreateVM(node, req)
+
+				detail, err := deps.ProxmoxClient.GetVMDetail(node, vmid)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 					return
 				}
-				c.JSON(http.StatusOK, gin.H{"message": "Đang tạo VM", "task_id": upid})
+
+				c.JSON(http.StatusOK, detail)
+			})
+
+			protected.POST("/nodes/:node/vms/clone", func(c *gin.Context) {
+				node := c.Param("node")
+				var req dto.CloneVMRequest
+				if err := c.ShouldBindJSON(&req); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "dữ liệu không hợp lệ: " + err.Error()})
+					return
+				}
+
+				upid, err := deps.ProxmoxClient.CloneVM(node, req.TemplateVMID, req)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+
+				c.JSON(http.StatusOK, gin.H{"message": "Đang clone VM từ template", "task_id": upid})
 			})
 
 			// Delete VM — chỉ admin mới được xóa
