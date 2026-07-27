@@ -17,3 +17,9 @@ type RefreshTokenRepository interface {
 	FindByTokenHash(ctx context.Context, tokenHash string) (*domain.RefreshToken, error)
 	Revoke(ctx context.Context, id string) error
 }
+
+type TaskRepository interface {
+	Create(ctx context.Context, task *domain.Task) error
+	FindByUPID(ctx context.Context, upid string) (*domain.Task, error)
+	UpdateStatus(ctx context.Context, upid string, status domain.TaskStatus, exitStatus *string) error
+}

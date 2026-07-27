@@ -18,6 +18,7 @@ import (
 type Dependencies struct {
 	ProxmoxClient *proxmox.Client
 	AuthService   service.AuthService
+	TaskService   service.TaskService
 	AppEnv        string
 }
 
@@ -35,6 +36,7 @@ func SetupRouter(deps Dependencies) *gin.Engine {
 	r.SetTrustedProxies(nil)
 
 	authHandler := handler.NewAuthHandler(deps.AuthService)
+	taskHandler := handler.NewTaskHandler(deps.TaskService)
 
 	api := r.Group("/api")
 	{
@@ -67,6 +69,8 @@ func SetupRouter(deps Dependencies) *gin.Engine {
 				}
 				c.JSON(http.StatusOK, nodes)
 			})
+
+			protected.GET("/tasks/:upid", taskHandler.GetTaskStatus)
 
 			protected.GET("/nodes/:node/vms", func(c *gin.Context) {
 				node := c.Param("node")
@@ -113,6 +117,9 @@ func SetupRouter(deps Dependencies) *gin.Engine {
 					return
 				}
 
+				userID, _ := c.Get(middleware.ContextKeyUserID)
+				deps.TaskService.RecordTask(c.Request.Context(), node, req.NewVMID, "clone", upid, userID.(string))
+
 				c.JSON(http.StatusOK, gin.H{"message": "Đang clone VM từ template", "task_id": upid})
 			})
 
@@ -129,23 +136,27 @@ func SetupRouter(deps Dependencies) *gin.Engine {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 					return
 				}
+
+				userID, _ := c.Get(middleware.ContextKeyUserID)
+				deps.TaskService.RecordTask(c.Request.Context(), node, vmid, "delete", upid, userID.(string))
+
 				c.JSON(http.StatusOK, gin.H{"message": "Đang xóa VM", "task_id": upid})
 			})
 
 			protected.POST("/nodes/:node/vms/:vmid/start", func(c *gin.Context) {
-				handleVMAction(c, deps.ProxmoxClient.StartVM)
+				handleVMAction(c, deps.TaskService, "start", deps.ProxmoxClient.StartVM)
 			})
 			protected.POST("/nodes/:node/vms/:vmid/stop", func(c *gin.Context) {
-				handleVMAction(c, deps.ProxmoxClient.StopVM)
+				handleVMAction(c, deps.TaskService, "stop", deps.ProxmoxClient.StopVM)
 			})
 			protected.POST("/nodes/:node/vms/:vmid/shutdown", func(c *gin.Context) {
-				handleVMAction(c, deps.ProxmoxClient.ShutdownVM)
+				handleVMAction(c, deps.TaskService, "shutdown", deps.ProxmoxClient.ShutdownVM)
 			})
 			protected.POST("/nodes/:node/vms/:vmid/reboot", func(c *gin.Context) {
-				handleVMAction(c, deps.ProxmoxClient.RebootVM)
+				handleVMAction(c, deps.TaskService, "reboot", deps.ProxmoxClient.RebootVM)
 			})
 			protected.POST("/nodes/:node/vms/:vmid/reset", func(c *gin.Context) {
-				handleVMAction(c, deps.ProxmoxClient.ResetVM)
+				handleVMAction(c, deps.TaskService, "reset", deps.ProxmoxClient.ResetVM)
 			})
 		}
 	}
@@ -153,7 +164,7 @@ func SetupRouter(deps Dependencies) *gin.Engine {
 	return r
 }
 
-func handleVMAction(c *gin.Context, action func(node string, vmid int) (string, error)) {
+func handleVMAction(c *gin.Context, taskService service.TaskService, actionName string, action func(node string, vmid int) (string, error)) {
 	node := c.Param("node")
 	vmid, err := strconv.Atoi(c.Param("vmid"))
 	if err != nil {
@@ -165,5 +176,9 @@ func handleVMAction(c *gin.Context, action func(node string, vmid int) (string, 
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	userID, _ := c.Get(middleware.ContextKeyUserID)
+	taskService.RecordTask(c.Request.Context(), node, vmid, actionName, upid, userID.(string))
+
 	c.JSON(http.StatusOK, gin.H{"message": "Lệnh đã được gửi", "task_id": upid})
 }

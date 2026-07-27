@@ -30,12 +30,16 @@ func main() {
 
 	userRepo := postgres.NewUserRepository(db)
 	refreshRepo := postgres.NewRefreshTokenRepository(db)
+	taskRepo := postgres.NewTaskRepository(db)
+
 	tokenMgr := service.NewTokenManager(cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	authService := service.NewAuthService(userRepo, refreshRepo, tokenMgr)
+	taskService := service.NewTaskService(taskRepo, proxmoxClient)
 
 	r := router.SetupRouter(router.Dependencies{
 		ProxmoxClient: proxmoxClient,
 		AuthService:   authService,
+		TaskService:   taskService,
 		AppEnv:        cfg.AppEnv,
 	})
 
