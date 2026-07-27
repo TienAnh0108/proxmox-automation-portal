@@ -18,12 +18,21 @@ import (
 type Dependencies struct {
 	ProxmoxClient *proxmox.Client
 	AuthService   service.AuthService
+	AppEnv        string
 }
 
 func SetupRouter(deps Dependencies) *gin.Engine {
+	if deps.AppEnv == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	} else {
+		gin.SetMode(gin.DebugMode)
+	}
+
 	r := gin.New()
 	r.Use(middleware.RequestLogger(logger.Log))
 	r.Use(gin.Recovery())
+
+	r.SetTrustedProxies(nil)
 
 	authHandler := handler.NewAuthHandler(deps.AuthService)
 

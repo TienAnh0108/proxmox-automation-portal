@@ -36,6 +36,7 @@ func main() {
 	r := router.SetupRouter(router.Dependencies{
 		ProxmoxClient: proxmoxClient,
 		AuthService:   authService,
+		AppEnv:        cfg.AppEnv,
 	})
 
 	ip := getLocalIP()
