@@ -11,3 +11,8 @@ backend/bin/
 
 # Docker volumes data (nếu bind-mount ra thư mục local thay vì named volume)
 postgres_data/
+
+*.json
+!package.json
+!package-lock.json
+*cookies*.txt
