@@ -12,13 +12,23 @@ và thay `<ACCESS_TOKEN>` / `<REFRESH_TOKEN>` bằng giá trị thật lấy t�
 
 ## Auth
 
+### Auth
+
+> **Cơ chế refresh token:** kể từ bản cập nhật này, refresh token KHÔNG còn nằm
+> trong JSON response — nó được server set qua cookie `HttpOnly` (tên cookie:
+> `refresh_token`, `Path=/api/auth`). Trình duyệt tự động gửi kèm cookie này ở
+> mọi request tới `/api/auth/*`, JavaScript phía client không đọc được (chống
+> XSS đánh cắp token). Khi test bằng `curl`, dùng `-c <file>` để lưu cookie và
+> `-b <file>` để gửi lại cookie ở request sau.
+
 ### POST /api/auth/login
-Đăng nhập, nhận access token + refresh token.
+Đăng nhập, nhận access token (JSON) + refresh token (cookie HttpOnly).
 
 **Auth required:** Không
 
 ```bash
 curl -X POST http://localhost:8080/api/auth/login \
+  -c cookies.txt \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin123"}'
 ```
@@ -27,7 +37,6 @@ curl -X POST http://localhost:8080/api/auth/login \
 ```json
 {
   "access_token": "eyJhbGciOi...",
-  "refresh_token": "TyyhJNXS31WBB0jz...",
   "expires_in": 1800,
   "user": {
     "id": "d1aa6423-4f05-4dd8-b1e1-c336426833b1",
@@ -37,48 +46,48 @@ curl -X POST http://localhost:8080/api/auth/login \
   }
 }
 ```
+*(refresh token nằm trong cookie `cookies.txt` sau lệnh trên, không có trong JSON)*
 
 **Response 401:** sai username/password (message chung, không tiết lộ username có tồn tại hay không)
 
 ---
 
 ### POST /api/auth/refresh
-Cấp access token mới từ refresh token. Áp dụng **rotation**: refresh token cũ bị thu hồi ngay khi dùng, refresh token mới được cấp thay thế.
+Cấp access token mới, đọc refresh token từ cookie thay vì request body. Áp dụng
+**rotation**: refresh token cũ bị thu hồi ngay khi dùng, cookie mới được set thay thế.
 
-**Auth required:** Không (dùng refresh token thay vì access token)
+**Auth required:** Không (dùng cookie refresh token thay vì access token)
 
 ```bash
 curl -X POST http://localhost:8080/api/auth/refresh \
-  -H "Content-Type: application/json" \
-  -d '{"refresh_token":"<REFRESH_TOKEN>"}'
+  -b cookies.txt -c cookies.txt
 ```
+*(`-b` gửi cookie hiện có, `-c` ghi đè cookie mới sau khi rotate — dùng cùng file để tự động cập nhật)*
 
 **Response 200:**
 ```json
 {
   "access_token": "eyJhbGciOi...",
-  "refresh_token": "<refresh_token_mới>",
   "expires_in": 1800
 }
 ```
 
 **Response 401:**
-- Token không tồn tại / sai định dạng
+- Thiếu cookie refresh token (`{"error":"thiếu refresh token"}`)
 - Token đã hết hạn (`REFRESH_TOKEN_TTL_DAYS` trong config)
 - Token đã bị thu hồi (đã dùng để refresh trước đó, hoặc đã logout)
 
 ---
 
 ### POST /api/auth/logout
-Thu hồi refresh token hiện tại — sau khi gọi, token này không dùng để `/refresh` được nữa.
+Thu hồi refresh token hiện tại (đọc từ cookie) và xóa cookie phía client.
 
 **Auth required:** Có (Bearer access token)
 
 ```bash
 curl -X POST http://localhost:8080/api/auth/logout \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -d '{"refresh_token":"<REFRESH_TOKEN>"}'
+  -b cookies.txt -c cookies.txt \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
 ```
 
 **Response 200:**
