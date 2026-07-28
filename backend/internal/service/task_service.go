@@ -84,7 +84,7 @@ func (s *taskService) GetTaskStatus(ctx context.Context, upid, requesterID, requ
 }
 
 func toTaskResponse(t *domain.Task) *dto.TaskResponse {
-	return &dto.TaskResponse{
+	resp := &dto.TaskResponse{
 		UPID:       t.UPID,
 		Node:       t.Node,
 		VMID:       t.VMID,
@@ -94,4 +94,11 @@ func toTaskResponse(t *domain.Task) *dto.TaskResponse {
 		CreatedBy:  t.CreatedBy,
 		CreatedAt:  t.CreatedAt,
 	}
+
+	if t.Status == domain.TaskStatusStopped && t.ExitStatus != nil {
+		success := *t.ExitStatus == "OK"
+		resp.Success = &success
+	}
+
+	return resp
 }

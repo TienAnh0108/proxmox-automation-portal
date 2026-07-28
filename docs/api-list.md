@@ -171,6 +171,12 @@ curl -X GET http://localhost:8080/api/nodes \
 
 ## VM
 
+> **Lưu ý về trạng thái VM:** Các action Start/Stop/Shutdown/Reboot/Reset/Delete đều
+> kiểm tra trạng thái VM hiện tại trước khi thực thi — nếu action không hợp lý với
+> trạng thái hiện tại (VD: Start một VM đang chạy, Delete một VM đang chạy), request
+> bị từ chối ngay với **409 Conflict**, không gửi lệnh lên Proxmox. Riêng **Clone**
+> không áp dụng rule này.
+
 ### GET /api/nodes/:node/vms
 Danh sách VM trong 1 node. 
 Lưu ý: response danh sách này **không có** `uptime_seconds`/`cores` - muốn xem 2 fields đó, gọi `GET /api/nodes/:node/vms/:vmid` (chi tiết 1 VM).
@@ -248,7 +254,27 @@ curl -X POST http://localhost:8080/api/nodes/pve-node1/vms \
 { "message": "Đang tạo VM", "task_id": "UPID:..." }
 ```
 
-> **Lưu ý còn tồn đọng:** endpoint này hiện tạo VM mới hoàn toàn, **chưa phải** clone từ template như yêu cầu MVP gốc — cần rà lại thiết kế ở bước tiếp theo.
+### POST /api/nodes/:node/vms/clone
+Tạo VM mới bằng cách Clone từ 1 VM template có sẵn. Hỗ trợ cả **Full Clone**
+(sao chép toàn bộ disk, độc lập hoàn toàn với template) và **Linked Clone**
+(dùng chung base disk với template, nhẹ hơn nhưng phụ thuộc template gốc).
+
+**Auth required:** Có (mọi role)
+
+```bash
+curl -X POST http://localhost:8080/api/nodes/proxmox/vms/clone \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -d '{"template_vmid":9998,"new_vmid":9996,"name":"my-new-vm","full_clone":false}'
+```
+
+**Response 200:**
+```json
+{ "message": "Đang clone VM từ template", "task_id": "UPID:..." }
+```
+
+Dùng `GET /api/tasks/:upid` (xem mục Task bên dưới) để theo dõi kết quả Clone —
+`success: true` khi hoàn tất thành công.
 
 ---
 
@@ -269,6 +295,10 @@ curl -X DELETE http://localhost:8080/api/nodes/pve-node1/vms/101 \
 
 **Response 403:** người gọi không phải admin
 
+**Response 409:** VM đang chạy (`running`) — phải Stop trước khi Delete
+```json
+{ "error": "VM đang chạy, không thể Delete" }
+```
 ---
 
 ### POST /api/nodes/:node/vms/:vmid/start, /stop, /shutdown, /reboot, /reset
@@ -299,6 +329,15 @@ curl -X POST http://localhost:8080/api/nodes/pve-node1/vms/101/reset \
 { "message": "Lệnh đã được gửi", "task_id": "UPID:..." }
 ```
 
+**Response 409:** trạng thái VM hiện tại không hợp lệ cho action này. Ví dụ:
+```json
+{ "error": "VM đang chạy, không thể Start" }
+```
+```json
+{ "error": "VM đang dừng, không thể Stop" }
+```
+Quy tắc: Start yêu cầu VM đang `stopped`; Stop/Shutdown/Reboot/Reset yêu cầu VM đang `running`.
+
 ---
 
 ## Task
@@ -325,13 +364,16 @@ curl -X GET http://localhost:8080/api/tasks/UPID:proxmox:001343C8:5682878A:6A672
   "action": "start",
   "status": "stopped",
   "exit_status": "OK",
+  "success": true,
   "created_by": "d1aa6423-4f05-4dd8-b1e1-c336426833b1",
   "created_at": "2026-07-27T17:12:48.337201+07:00"
 }
 ```
 Lưu ý: `status: "stopped"` nghĩa là **task đã kết thúc** (theo thuật ngữ Proxmox task log),
 không phải trạng thái VM. `status: "running"` nghĩa là task còn đang xử lý trên Proxmox —
-gọi lại endpoint này sau vài giây để xem kết quả mới nhất.
+gọi lại endpoint này sau vài giây để xem kết quả mới nhất. `success` chỉ xuất hiện khi task đã kết thúc (`status: "stopped"`) — `true` nếu
+`exit_status == "OK"`, `false` nếu khác. Khi `status: "running"`, field này vắng mặt
+(chưa có kết quả để đánh giá).
 
 **Response 404:** UPID không tồn tại trong hệ thống (chưa từng submit action nào qua Portal
 với UPID này)
@@ -387,3 +429,6 @@ curl -X POST http://localhost:8080/api/auth/logout \
 - Mọi request tới route bảo vệ cần header: `Authorization: Bearer <access_token>`
 - **Mọi endpoint đều có tiền tố `/api`** — lỗi `404 page not found` phổ biến nhất là do quên tiền tố này
 - Role hiện có: `admin`, `user` — mở rộng RBAC chi tiết hơn để ở phase sau MVP  
+- Mọi action VM (trừ Clone) đều kiểm tra trạng thái hiện tại trước khi thực thi —
+  không hợp lệ sẽ trả `409 Conflict` kèm message rõ ràng, thay vì gửi lệnh lên
+  Proxmox rồi để `exit_status` báo lỗi mơ hồ
