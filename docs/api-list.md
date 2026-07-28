@@ -301,6 +301,49 @@ curl -X POST http://localhost:8080/api/nodes/pve-node1/vms/101/reset \
 
 ---
 
+## Task
+
+### GET /api/tasks/:upid
+Xem trạng thái mới nhất của 1 task (Clone/Start/Stop/Shutdown/Reboot/Reset/Delete VM)
+theo UPID. Mỗi lần gọi endpoint này sẽ poll trực tiếp Proxmox để lấy trạng thái mới
+nhất, đồng thời cập nhật lại trong DB.
+
+**Auth required:** Có (Bearer access token). User thường chỉ xem được task do **chính
+mình** submit — admin xem được mọi task.
+
+```bash
+curl -X GET http://localhost:8080/api/tasks/UPID:proxmox:001343C8:5682878A:6A672F2B:qmstart:9997:root@pam!cloud-portal-v2: \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+**Response 200:**
+```json
+{
+  "upid": "UPID:proxmox:001343C8:5682878A:6A672F2B:qmstart:9997:root@pam!cloud-portal-v2:",
+  "node": "proxmox",
+  "vmid": 9997,
+  "action": "start",
+  "status": "stopped",
+  "exit_status": "OK",
+  "created_by": "d1aa6423-4f05-4dd8-b1e1-c336426833b1",
+  "created_at": "2026-07-27T17:12:48.337201+07:00"
+}
+```
+Lưu ý: `status: "stopped"` nghĩa là **task đã kết thúc** (theo thuật ngữ Proxmox task log),
+không phải trạng thái VM. `status: "running"` nghĩa là task còn đang xử lý trên Proxmox —
+gọi lại endpoint này sau vài giây để xem kết quả mới nhất.
+
+**Response 404:** UPID không tồn tại trong hệ thống (chưa từng submit action nào qua Portal
+với UPID này)
+
+**Response 403:** task tồn tại nhưng không phải do mình submit (và mình không phải admin)
+
+- Mọi action VM (Clone/Start/Stop/Shutdown/Reboot/Reset/Delete) đều tự động ghi lại
+  vào bảng `tasks` — dùng `GET /api/tasks/:upid` để theo dõi kết quả thay vì đoán qua
+  response ngay lúc submit (response submit chỉ xác nhận đã gửi lệnh, KHÔNG xác nhận
+  hành động đã hoàn tất)
+---
+
 ## Chuỗi lệnh test nhanh — copy chạy tuần tự (Bash / Ubuntu)
 
 ```bash

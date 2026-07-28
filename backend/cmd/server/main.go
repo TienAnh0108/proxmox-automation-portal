@@ -35,11 +35,13 @@ func main() {
 	tokenMgr := service.NewTokenManager(cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	authService := service.NewAuthService(userRepo, refreshRepo, tokenMgr)
 	taskService := service.NewTaskService(taskRepo, proxmoxClient)
+	vmService := service.NewVMService(proxmoxClient, taskService)
 
 	r := router.SetupRouter(router.Dependencies{
 		ProxmoxClient: proxmoxClient,
 		AuthService:   authService,
 		TaskService:   taskService,
+		VMService:     vmService,
 		AppEnv:        cfg.AppEnv,
 	})
 

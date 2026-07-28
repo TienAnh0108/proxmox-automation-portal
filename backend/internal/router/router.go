@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -19,6 +20,7 @@ type Dependencies struct {
 	ProxmoxClient *proxmox.Client
 	AuthService   service.AuthService
 	TaskService   service.TaskService
+	VMService     service.VMService
 	AppEnv        string
 }
 
@@ -131,32 +133,31 @@ func SetupRouter(deps Dependencies) *gin.Engine {
 					c.JSON(http.StatusBadRequest, gin.H{"error": "vmid không hợp lệ"})
 					return
 				}
-				upid, err := deps.ProxmoxClient.DeleteVM(node, vmid)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-					return
-				}
 
 				userID, _ := c.Get(middleware.ContextKeyUserID)
-				deps.TaskService.RecordTask(c.Request.Context(), node, vmid, "delete", upid, userID.(string))
+				upid, err := deps.VMService.Delete(c.Request.Context(), node, vmid, userID.(string))
+				if err != nil {
+					writeVMError(c, err)
+					return
+				}
 
 				c.JSON(http.StatusOK, gin.H{"message": "Đang xóa VM", "task_id": upid})
 			})
 
 			protected.POST("/nodes/:node/vms/:vmid/start", func(c *gin.Context) {
-				handleVMAction(c, deps.TaskService, "start", deps.ProxmoxClient.StartVM)
+				handleVMServiceAction(c, deps.VMService.Start)
 			})
 			protected.POST("/nodes/:node/vms/:vmid/stop", func(c *gin.Context) {
-				handleVMAction(c, deps.TaskService, "stop", deps.ProxmoxClient.StopVM)
+				handleVMServiceAction(c, deps.VMService.Stop)
 			})
 			protected.POST("/nodes/:node/vms/:vmid/shutdown", func(c *gin.Context) {
-				handleVMAction(c, deps.TaskService, "shutdown", deps.ProxmoxClient.ShutdownVM)
+				handleVMServiceAction(c, deps.VMService.Shutdown)
 			})
 			protected.POST("/nodes/:node/vms/:vmid/reboot", func(c *gin.Context) {
-				handleVMAction(c, deps.TaskService, "reboot", deps.ProxmoxClient.RebootVM)
+				handleVMServiceAction(c, deps.VMService.Reboot)
 			})
 			protected.POST("/nodes/:node/vms/:vmid/reset", func(c *gin.Context) {
-				handleVMAction(c, deps.TaskService, "reset", deps.ProxmoxClient.ResetVM)
+				handleVMServiceAction(c, deps.VMService.Reset)
 			})
 		}
 	}
@@ -164,21 +165,33 @@ func SetupRouter(deps Dependencies) *gin.Engine {
 	return r
 }
 
-func handleVMAction(c *gin.Context, taskService service.TaskService, actionName string, action func(node string, vmid int) (string, error)) {
+type vmServiceAction func(ctx context.Context, node string, vmid int, userID string) (string, error)
+
+func handleVMServiceAction(c *gin.Context, action vmServiceAction) {
 	node := c.Param("node")
 	vmid, err := strconv.Atoi(c.Param("vmid"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "vmid không hợp lệ"})
 		return
 	}
-	upid, err := action(node, vmid)
+
+	userID, _ := c.Get(middleware.ContextKeyUserID)
+	upid, err := action(c.Request.Context(), node, vmid, userID.(string))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeVMError(c, err)
 		return
 	}
 
-	userID, _ := c.Get(middleware.ContextKeyUserID)
-	taskService.RecordTask(c.Request.Context(), node, vmid, actionName, upid, userID.(string))
-
 	c.JSON(http.StatusOK, gin.H{"message": "Lệnh đã được gửi", "task_id": upid})
+}
+
+// writeVMError ánh xạ lỗi từ VMService sang đúng HTTP status — cùng pattern
+// với writeAuthError trong auth_handler.go.
+func writeVMError(c *gin.Context, err error) {
+	var stateErr *service.VMStateError
+	if errors.As(err, &stateErr) {
+		c.JSON(http.StatusConflict, gin.H{"error": stateErr.Error()})
+		return
+	}
+	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 }
