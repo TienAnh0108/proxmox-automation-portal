@@ -31,6 +31,9 @@ type Config struct {
 	JWTSecret       string
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
+
+	FrontendOrigin string
+	CookieSecure   bool
 }
 
 func Load() *Config {
@@ -60,6 +63,9 @@ func Load() *Config {
 		JWTSecret:       viper.GetString("JWT_SECRET"),
 		AccessTokenTTL:  time.Duration(viper.GetInt("ACCESS_TOKEN_TTL_MINUTES")) * time.Minute,
 		RefreshTokenTTL: time.Duration(viper.GetInt("REFRESH_TOKEN_TTL_DAYS")) * 24 * time.Hour,
+
+		FrontendOrigin: viper.GetString("FRONTEND_ORIGIN"),
+		CookieSecure:   viper.GetBool("COOKIE_SECURE"),
 	}
 
 	cfg.validate()

@@ -38,11 +38,14 @@ func main() {
 	vmService := service.NewVMService(proxmoxClient, taskService)
 
 	r := router.SetupRouter(router.Dependencies{
-		ProxmoxClient: proxmoxClient,
-		AuthService:   authService,
-		TaskService:   taskService,
-		VMService:     vmService,
-		AppEnv:        cfg.AppEnv,
+		ProxmoxClient:      proxmoxClient,
+		AuthService:        authService,
+		TaskService:        taskService,
+		VMService:          vmService,
+		AppEnv:             cfg.AppEnv,
+		FrontendOrigin:     cfg.FrontendOrigin,
+		CookieSecure:       cfg.CookieSecure,
+		RefreshTokenMaxAge: int(cfg.RefreshTokenTTL.Seconds()),
 	})
 
 	ip := getLocalIP()

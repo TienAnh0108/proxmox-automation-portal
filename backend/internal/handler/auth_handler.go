@@ -12,12 +12,26 @@ import (
 	"go.uber.org/zap"
 )
 
+const refreshCookieName = "refresh_token"
+
 type AuthHandler struct {
-	authService service.AuthService
+	authService        service.AuthService
+	cookieSecure       bool // true khi đã có HTTPS (đọc từ config, xem bước 6)
+	refreshTokenMaxAge int  // giây — dùng làm Max-Age của cookie
 }
 
-func NewAuthHandler(authService service.AuthService) *AuthHandler {
-	return &AuthHandler{authService: authService}
+func NewAuthHandler(authService service.AuthService, cookieSecure bool, refreshTokenMaxAge int) *AuthHandler {
+	return &AuthHandler{
+		authService:        authService,
+		cookieSecure:       cookieSecure,
+		refreshTokenMaxAge: refreshTokenMaxAge,
+	}
+}
+
+// setRefreshCookie set cookie HttpOnly chứa refresh token — Path giới hạn
+// chỉ gửi kèm khi gọi /api/auth/*, không gửi kèm mọi request khác.
+func (h *AuthHandler) setRefreshCookie(c *gin.Context, value string, maxAge int) {
+	c.SetCookie(refreshCookieName, value, maxAge, "/api/auth", "", h.cookieSecure, true)
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {
@@ -43,48 +57,47 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.authService.Login(c.Request.Context(), req)
+	resp, rawRefresh, err := h.authService.Login(c.Request.Context(), req)
 	if err != nil {
 		writeAuthError(c, err)
 		return
 	}
 
+	h.setRefreshCookie(c, rawRefresh, h.refreshTokenMaxAge)
 	c.JSON(http.StatusOK, resp)
 }
 
 func (h *AuthHandler) Refresh(c *gin.Context) {
-	var req dto.RefreshRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "dữ liệu không hợp lệ: " + err.Error()})
+	rawRefresh, err := c.Cookie(refreshCookieName)
+	if err != nil || rawRefresh == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "thiếu refresh token"})
 		return
 	}
 
-	resp, err := h.authService.Refresh(c.Request.Context(), req)
+	resp, newRawRefresh, err := h.authService.Refresh(c.Request.Context(), rawRefresh)
 	if err != nil {
 		writeAuthError(c, err)
 		return
 	}
 
+	h.setRefreshCookie(c, newRawRefresh, h.refreshTokenMaxAge)
 	c.JSON(http.StatusOK, resp)
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
-	var req dto.LogoutRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "dữ liệu không hợp lệ: " + err.Error()})
-		return
+	rawRefresh, err := c.Cookie(refreshCookieName)
+	if err == nil && rawRefresh != "" {
+		if err := h.authService.Logout(c.Request.Context(), rawRefresh); err != nil {
+			writeAuthError(c, err)
+			return
+		}
 	}
 
-	if err := h.authService.Logout(c.Request.Context(), req); err != nil {
-		writeAuthError(c, err)
-		return
-	}
-
+	// Xóa cookie dù có tìm thấy token hay không — client coi như đã logout.
+	h.setRefreshCookie(c, "", -1)
 	c.JSON(http.StatusOK, gin.H{"message": "đăng xuất thành công"})
 }
 
-// Me trả thông tin user hiện tại — dữ liệu lấy từ context, đã được
-// AuthMiddleware set sẵn, KHÔNG cần query lại DB.
 func (h *AuthHandler) Me(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	username, _ := c.Get("username")
@@ -97,8 +110,6 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	})
 }
 
-// writeAuthError ánh xạ lỗi nghiệp vụ (từ Service) sang đúng HTTP status
-// code. Gom về 1 hàm dùng chung để không lặp lại switch-case ở mọi handler.
 func writeAuthError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrInvalidCredentials):
@@ -114,12 +125,7 @@ func writeAuthError(c *gin.Context, err error) {
 	case errors.Is(err, postgres.ErrUsernameTaken):
 		c.JSON(http.StatusConflict, gin.H{"error": "username đã tồn tại"})
 	default:
-		// Lỗi không xác định — log ĐẦY ĐỦ chi tiết (bao gồm err gốc) để debug,
-		// nhưng response cho client vẫn chung chung, không lộ thông tin nội bộ.
-		logger.Log.Error("unhandled auth error",
-			zap.Error(err),
-			zap.String("path", c.Request.URL.Path),
-		)
+		logger.Log.Error("unhandled auth error", zap.Error(err), zap.String("path", c.Request.URL.Path))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "đã có lỗi xảy ra, vui lòng thử lại"})
 	}
 }

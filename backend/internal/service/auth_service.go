@@ -13,14 +13,14 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// AuthService định nghĩa các use-case liên quan tới xác thực.
-// Handler sẽ phụ thuộc vào interface này, không phụ thuộc thẳng vào
-// implementation cụ thể — cho phép mock khi viết unit test cho Handler.
+// AuthService — Login/Refresh trả thêm rawRefreshToken (string) tách biệt
+// khỏi response JSON, vì Handler cần giá trị này để set cookie chứ không
+// đưa vào JSON body. Logout nhận thẳng rawRefreshToken thay vì dto.LogoutRequest.
 type AuthService interface {
 	Register(ctx context.Context, req dto.RegisterRequest) (*dto.UserResponse, error)
-	Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error)
-	Refresh(ctx context.Context, req dto.RefreshRequest) (*dto.RefreshResponse, error)
-	Logout(ctx context.Context, req dto.LogoutRequest) error
+	Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, string, error)
+	Refresh(ctx context.Context, rawRefreshToken string) (*dto.RefreshResponse, string, error)
+	Logout(ctx context.Context, rawRefreshToken string) error
 	ValidateAccessToken(tokenString string) (*Claims, error)
 }
 
@@ -61,7 +61,7 @@ func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 
 	if err := s.userRepo.Create(ctx, user); err != nil {
 		if errors.Is(err, postgres.ErrUsernameTaken) {
-			return nil, err // Handler sẽ nhận diện lỗi này để trả 409 Conflict
+			return nil, err
 		}
 		return nil, fmt.Errorf("create user: %w", err)
 	}
@@ -70,30 +70,27 @@ func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 	return &resp, nil
 }
 
-func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error) {
+func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, string, error) {
 	user, err := s.userRepo.FindByUsername(ctx, req.Username)
 	if err != nil {
 		if errors.Is(err, postgres.ErrUserNotFound) {
-			// Cố ý trả lỗi CHUNG "invalid credentials" thay vì "user not found" —
-			// tránh lộ thông tin username nào tồn tại trong hệ thống
-			// (user enumeration attack).
-			return nil, ErrInvalidCredentials
+			return nil, "", ErrInvalidCredentials
 		}
-		return nil, fmt.Errorf("find user: %w", err)
+		return nil, "", fmt.Errorf("find user: %w", err)
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		return nil, ErrInvalidCredentials
+		return nil, "", ErrInvalidCredentials
 	}
 
 	accessToken, err := s.tokenMgr.GenerateAccessToken(user)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	rawRefresh, hashedRefresh, err := s.tokenMgr.GenerateRefreshToken()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	refreshRecord := &domain.RefreshToken{
@@ -102,55 +99,52 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 		ExpiresAt: time.Now().Add(s.tokenMgr.RefreshTokenTTL()),
 	}
 	if err := s.refreshRepo.Create(ctx, refreshRecord); err != nil {
-		return nil, fmt.Errorf("save refresh token: %w", err)
+		return nil, "", fmt.Errorf("save refresh token: %w", err)
 	}
 
-	return &dto.LoginResponse{
-		AccessToken:  accessToken,
-		RefreshToken: rawRefresh,
-		ExpiresIn:    s.tokenMgr.AccessTokenTTLSeconds(),
-		User:         toUserResponse(user),
-	}, nil
+	resp := &dto.LoginResponse{
+		AccessToken: accessToken,
+		ExpiresIn:   s.tokenMgr.AccessTokenTTLSeconds(),
+		User:        toUserResponse(user),
+	}
+	return resp, rawRefresh, nil
 }
 
-func (s *authService) Refresh(ctx context.Context, req dto.RefreshRequest) (*dto.RefreshResponse, error) {
-	hashedToken := HashToken(req.RefreshToken)
+func (s *authService) Refresh(ctx context.Context, rawRefreshToken string) (*dto.RefreshResponse, string, error) {
+	hashedToken := HashToken(rawRefreshToken)
 
 	stored, err := s.refreshRepo.FindByTokenHash(ctx, hashedToken)
 	if err != nil {
 		if errors.Is(err, postgres.ErrRefreshTokenNotFound) {
-			return nil, ErrInvalidToken
+			return nil, "", ErrInvalidToken
 		}
-		return nil, fmt.Errorf("find refresh token: %w", err)
+		return nil, "", fmt.Errorf("find refresh token: %w", err)
 	}
 
 	if stored.IsRevoked() {
-		return nil, ErrTokenRevoked
+		return nil, "", ErrTokenRevoked
 	}
 	if stored.IsExpired() {
-		return nil, ErrTokenExpired
+		return nil, "", ErrTokenExpired
 	}
 
 	user, err := s.userRepo.FindByID(ctx, stored.UserID)
 	if err != nil {
-		return nil, fmt.Errorf("find user: %w", err)
+		return nil, "", fmt.Errorf("find user: %w", err)
 	}
 
-	// Rotation: thu hồi token cũ trước khi cấp token mới — nếu bước cấp mới
-	// thất bại giữa chừng, token cũ vẫn bị vô hiệu (an toàn hơn để lộ khả năng
-	// dùng lại token cũ so với việc tồn tại 2 token cùng hợp lệ).
 	if err := s.refreshRepo.Revoke(ctx, stored.ID); err != nil {
-		return nil, fmt.Errorf("revoke old refresh token: %w", err)
+		return nil, "", fmt.Errorf("revoke old refresh token: %w", err)
 	}
 
 	accessToken, err := s.tokenMgr.GenerateAccessToken(user)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	rawRefresh, hashedRefresh, err := s.tokenMgr.GenerateRefreshToken()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	newRecord := &domain.RefreshToken{
@@ -159,24 +153,22 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshRequest) (*dto
 		ExpiresAt: time.Now().Add(s.tokenMgr.RefreshTokenTTL()),
 	}
 	if err := s.refreshRepo.Create(ctx, newRecord); err != nil {
-		return nil, fmt.Errorf("save new refresh token: %w", err)
+		return nil, "", fmt.Errorf("save new refresh token: %w", err)
 	}
 
-	return &dto.RefreshResponse{
-		AccessToken:  accessToken,
-		RefreshToken: rawRefresh,
-		ExpiresIn:    s.tokenMgr.AccessTokenTTLSeconds(),
-	}, nil
+	resp := &dto.RefreshResponse{
+		AccessToken: accessToken,
+		ExpiresIn:   s.tokenMgr.AccessTokenTTLSeconds(),
+	}
+	return resp, rawRefresh, nil
 }
 
-func (s *authService) Logout(ctx context.Context, req dto.LogoutRequest) error {
-	hashedToken := HashToken(req.RefreshToken)
+func (s *authService) Logout(ctx context.Context, rawRefreshToken string) error {
+	hashedToken := HashToken(rawRefreshToken)
 
 	stored, err := s.refreshRepo.FindByTokenHash(ctx, hashedToken)
 	if err != nil {
 		if errors.Is(err, postgres.ErrRefreshTokenNotFound) {
-			// Token không tồn tại — coi như đã logout, không cần báo lỗi
-			// cho client (client chỉ quan tâm "giờ tôi đã đăng xuất chưa").
 			return nil
 		}
 		return fmt.Errorf("find refresh token: %w", err)

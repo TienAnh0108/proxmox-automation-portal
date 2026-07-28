@@ -17,11 +17,14 @@ import (
 )
 
 type Dependencies struct {
-	ProxmoxClient *proxmox.Client
-	AuthService   service.AuthService
-	TaskService   service.TaskService
-	VMService     service.VMService
-	AppEnv        string
+	ProxmoxClient      *proxmox.Client
+	AuthService        service.AuthService
+	TaskService        service.TaskService
+	VMService          service.VMService
+	AppEnv             string
+	FrontendOrigin     string
+	CookieSecure       bool
+	RefreshTokenMaxAge int
 }
 
 func SetupRouter(deps Dependencies) *gin.Engine {
@@ -32,12 +35,12 @@ func SetupRouter(deps Dependencies) *gin.Engine {
 	}
 
 	r := gin.New()
+	r.Use(middleware.CORS(deps.FrontendOrigin))
 	r.Use(middleware.RequestLogger(logger.Log))
 	r.Use(gin.Recovery())
-
 	r.SetTrustedProxies(nil)
 
-	authHandler := handler.NewAuthHandler(deps.AuthService)
+	authHandler := handler.NewAuthHandler(deps.AuthService, deps.CookieSecure, deps.RefreshTokenMaxAge)
 	taskHandler := handler.NewTaskHandler(deps.TaskService)
 
 	api := r.Group("/api")
