@@ -3,7 +3,7 @@ import { Header } from "@/components/layout/Header";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-neutral-950">
+    <div className="min-h-screen bg-background">
       <Header />
       <main className="p-6">{children}</main>
     </div>

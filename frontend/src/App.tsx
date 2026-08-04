@@ -3,10 +3,7 @@ import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
-
-function VMDetailPage() {
-  return <div>VM Detail Page (tạm thời)</div>;
-}
+import { VMDetailPage } from "@/pages/VMDetailPage";
 
 function App() {
   return (

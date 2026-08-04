@@ -32,9 +32,8 @@ export function DashboardPage() {
   }, []);
 
   if (isLoading) {
-    return <p className="text-neutral-400">Đang tải danh sách node...</p>;
+    return <p className="text-muted-foreground">Đang tải danh sách node...</p>;
   }
-
   if (error) {
     return <p className="text-red-500">Lỗi: {error}</p>;
   }
@@ -68,7 +67,7 @@ export function DashboardPage() {
                   </span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-1 text-sm text-neutral-400">
+              <CardContent className="space-y-1 text-sm text-muted-foreground">
                 <p>CPU: {node.cpu_percent}% ({node.maxcpu} cores)</p>
                 <p>RAM: {node.mem_percent}% ({node.mem_gib} / {node.maxmem_gib} GiB)</p>
                 <p>Disk: {node.disk_percent}% ({node.disk_gib} / {node.maxdisk_gib} GiB)</p>

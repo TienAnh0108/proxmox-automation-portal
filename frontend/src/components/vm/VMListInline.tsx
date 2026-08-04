@@ -26,7 +26,7 @@ export function VMListInline({ node }: { node: string }) {
   }, [node]); // chạy lại nếu prop `node` đổi — dù thực tế Component này bị unmount/remount mỗi lần đóng/mở accordion nên [] cũng đủ, nhưng khai báo đúng dependency là thói quen đúng
 
   if (isLoading) {
-    return <p className="p-4 text-sm text-neutral-400">Đang tải danh sách VM...</p>;
+    return <p className="p-4 text-sm text-muted-foreground">Đang tải danh sách VM...</p>;
   }
 
   if (error) {
@@ -34,25 +34,25 @@ export function VMListInline({ node }: { node: string }) {
   }
 
   if (vms.length === 0) {
-    return <p className="p-4 text-sm text-neutral-500">Không có VM nào trên node này.</p>;
+    return <p className="p-4 text-sm text-muted-foreground">Không có VM nào trên node này.</p>;
   }
 
   return (
-    <div className="divide-y divide-neutral-800 border-t border-neutral-800">
+    <div className="divide-y divide-border border-t border-border">
       {vms.map((vm) => (
         <Link
           key={vm.vmid}
           to={`/nodes/${node}/vms/${vm.vmid}`}
-          className="flex items-center justify-between px-4 py-3 text-sm hover:bg-neutral-800"
+          className="flex items-center justify-between px-4 py-3 text-sm hover:bg-accent"
         >
           <div>
-            <span className="font-medium text-white">{vm.name}</span>
-            <span className="ml-2 text-neutral-500">#{vm.vmid}</span>
+            <span className="font-medium text-foreground">{vm.name}</span>
+            <span className="ml-2 text-muted-foreground">#{vm.vmid}</span>
           </div>
-          <div className="flex items-center gap-4 text-neutral-400">
+          <div className="flex items-center gap-4 text-muted-foreground">
             <span>CPU {vm.cpu_percent}%</span>
             <span>RAM {vm.mem_percent}%</span>
-            <span className={vm.status === "running" ? "text-green-500" : "text-neutral-500"}>
+            <span className={vm.status === "running" ? "text-green-500" : "text-muted-foreground"}>
               {vm.status}
             </span>
           </div>

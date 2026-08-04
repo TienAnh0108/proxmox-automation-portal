@@ -27,15 +27,15 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex h-screen items-center justify-center bg-neutral-950">
+    <div className="flex h-screen items-center justify-center bg-background">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-4 rounded-lg border border-neutral-800 bg-neutral-900 p-6"
+        className="w-full max-w-sm space-y-4 rounded-lg border border-border bg-card p-6"
       >
-        <h1 className="text-xl font-semibold text-white">Cloud Automation Portal</h1>
+        <h1 className="text-xl font-semibold text-foreground">Cloud Automation Portal</h1>
 
         <div className="space-y-2">
-          <label htmlFor="username" className="text-sm text-neutral-400">
+          <label htmlFor="username" className="text-sm text-muted-foreground">
             Tên đăng nhập
           </label>
           <input
@@ -44,12 +44,12 @@ export function LoginPage() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required
-            className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-white outline-none focus:border-neutral-500"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground outline-none focus:border-ring"
           />
         </div>
 
         <div className="space-y-2">
-          <label htmlFor="password" className="text-sm text-neutral-400">
+          <label htmlFor="password" className="text-sm text-muted-foreground">
             Mật khẩu
           </label>
           <input
@@ -58,7 +58,7 @@ export function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-3 py-2 text-white outline-none focus:border-neutral-500"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-foreground outline-none focus:border-ring"
           />
         </div>
 
