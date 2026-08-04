@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { apiFetch } from "@/api/client";
 import type { VMDetail } from "@/types/vm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { VMActions } from "@/components/vm/VMActions";
+import { useVMMetrics } from "@/hooks/useVMMetrics";
 
 export function VMDetailPage() {
   const { node, vmid } = useParams<{ node: string; vmid: string }>();
@@ -10,44 +12,40 @@ export function VMDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchDetail() {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const data = await apiFetch<VMDetail>(`/nodes/${node}/vms/${vmid}`);
-        setVm(data);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Không thể tải chi tiết VM";
-        setError(message);
-      } finally {
-        setIsLoading(false);
-      }
+  const fetchDetail = useCallback(async () => {
+    if (!node || !vmid) return;
+    try {
+      const data = await apiFetch<VMDetail>(`/nodes/${node}/vms/${vmid}`);
+      setVm(data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Không thể tải chi tiết VM";
+      setError(message);
+    } finally {
+      setIsLoading(false);
     }
+  }, [node, vmid]);
+
+  useEffect(() => {
+    setIsLoading(true);
+    setError(null);
     fetchDetail();
-  }, [node, vmid]); // fetch lại nếu điều hướng sang VM khác trong khi đang ở trang này
+  }, [fetchDetail]);
 
-  if (isLoading) {
-    return <p className="text-neutral-400">Đang tải chi tiết VM...</p>;
-  }
+  useVMMetrics(node ?? "", vmid ?? "", (updatedVm) => setVm(updatedVm));
 
-  if (error) {
-    return <p className="text-red-500">Lỗi: {error}</p>;
-  }
-
-  if (!vm) {
-    return <p className="text-neutral-500">Không tìm thấy VM.</p>;
-  }
+  if (isLoading) return <p className="text-muted-foreground">Đang tải chi tiết VM...</p>;
+  if (error) return <p className="text-red-500">Lỗi: {error}</p>;
+  if (!vm || !node || !vmid) return <p className="text-muted-foreground">Không tìm thấy VM.</p>;
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-2xl space-y-4">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>
-              {vm.name} <span className="text-neutral-500">#{vm.vmid}</span>
+              {vm.name} <span className="text-muted-foreground">#{vm.vmid}</span>
             </span>
-            <span className={vm.status === "running" ? "text-green-500" : "text-neutral-500"}>
+            <span className={vm.status === "running" ? "text-green-500" : "text-muted-foreground"}>
               {vm.status}
             </span>
           </CardTitle>
@@ -77,6 +75,8 @@ export function VMDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      <VMActions node={node} vmid={Number(vmid)} onActionComplete={fetchDetail} />
     </div>
   );
 }
